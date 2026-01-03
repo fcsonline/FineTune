@@ -1,52 +1,54 @@
-// FineTune/Views/SystemVolumeRowView.swift
+// FineTune/Views/DeviceVolumeRowView.swift
 import SwiftUI
 
-struct SystemVolumeRowView: View {
-    let deviceName: String
-    let deviceIcon: NSImage?
+struct DeviceVolumeRowView: View {
+    let device: AudioDevice
     let volume: Float  // 0-1
+    let isDefault: Bool
     let onVolumeChange: (Float) -> Void
 
     @State private var sliderValue: Double  // 0-1
 
     init(
-        deviceName: String,
-        deviceIcon: NSImage?,
+        device: AudioDevice,
         volume: Float,
+        isDefault: Bool,
         onVolumeChange: @escaping (Float) -> Void
     ) {
-        self.deviceName = deviceName
-        self.deviceIcon = deviceIcon
+        self.device = device
         self.volume = volume
+        self.isDefault = isDefault
         self.onVolumeChange = onVolumeChange
         self._sliderValue = State(initialValue: Double(volume))
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            Group {
-                if let icon = deviceIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } else {
-                    Image(systemName: "speaker.wave.2")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                }
+            // Icon - use device.icon with SF Symbol fallback
+            if let icon = device.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(systemName: "speaker.wave.2")
+                    .frame(width: 24, height: 24)
             }
-            .frame(width: 24, height: 24)
 
-            Text(deviceName)
+            // Name - bolder if default
+            Text(device.name)
+                .fontWeight(isDefault ? .semibold : .regular)
                 .lineLimit(1)
                 .frame(width: 80, alignment: .leading)
 
+            // Slider
             Slider(value: $sliderValue, in: 0...1)
                 .frame(minWidth: 80)
                 .onChange(of: sliderValue) { _, newValue in
                     onVolumeChange(Float(newValue))
                 }
 
+            // Percentage
             Text("\(Int(sliderValue * 100))%")
                 .font(.caption)
                 .foregroundStyle(.secondary)
