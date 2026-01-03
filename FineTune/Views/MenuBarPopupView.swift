@@ -3,9 +3,22 @@ import SwiftUI
 
 struct MenuBarPopupView: View {
     @Bindable var audioEngine: AudioEngine
+    @Bindable var systemVolumeMonitor: SystemVolumeMonitor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // System volume row
+            SystemVolumeRowView(
+                deviceName: systemVolumeMonitor.deviceName,
+                deviceIcon: systemVolumeMonitor.deviceIcon,
+                volume: systemVolumeMonitor.volume,
+                onVolumeChange: { volume in
+                    systemVolumeMonitor.setVolume(volume)
+                }
+            )
+
+            Divider()
+
             if audioEngine.apps.isEmpty {
                 HStack {
                     Spacer()
