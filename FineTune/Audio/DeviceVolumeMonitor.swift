@@ -228,8 +228,7 @@ final class DeviceVolumeMonitor {
             // The HAL returns 1.0 (default) until the BT firmware handshake completes.
             // Schedule a delayed re-read to get the actual volume.
             let transportType = device.id.readTransportType()
-            if transportType == kAudioDeviceTransportTypeBluetooth ||
-               transportType == kAudioDeviceTransportTypeBluetoothLE {
+            if transportType == .bluetooth || transportType == .bluetoothLE {
                 let deviceID = device.id
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .milliseconds(200))

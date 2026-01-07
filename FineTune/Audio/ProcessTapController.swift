@@ -257,8 +257,7 @@ final class ProcessTapController {
             destVolume = destDevice.id.readOutputVolumeScalar()
             destSampleRate = (try? destDevice.id.readNominalSampleRate()) ?? 0
             let transport = destDevice.id.readTransportType()
-            isBluetoothDestination = (transport == kAudioDeviceTransportTypeBluetooth ||
-                                       transport == kAudioDeviceTransportTypeBluetoothLE)
+            isBluetoothDestination = (transport == .bluetooth || transport == .bluetoothLE)
             logger.debug("[CROSSFADE] Destination device (cached): volume=\(destVolume), sampleRate=\(destSampleRate)Hz, BT=\(isBluetoothDestination)")
         } else {
             // Fallback: device may have disconnected, try fresh read
@@ -267,8 +266,7 @@ final class ProcessTapController {
                 destVolume = destDevice.readOutputVolumeScalar()
                 destSampleRate = (try? destDevice.readNominalSampleRate()) ?? 0
                 let transport = destDevice.readTransportType()
-                isBluetoothDestination = (transport == kAudioDeviceTransportTypeBluetooth ||
-                                           transport == kAudioDeviceTransportTypeBluetoothLE)
+                isBluetoothDestination = (transport == .bluetooth || transport == .bluetoothLE)
                 logger.debug("[CROSSFADE] Destination device (fallback): volume=\(destVolume), sampleRate=\(destSampleRate)Hz, BT=\(isBluetoothDestination)")
             }
         }
