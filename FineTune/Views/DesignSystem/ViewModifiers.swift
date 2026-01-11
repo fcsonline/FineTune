@@ -14,7 +14,6 @@ struct HoverableRowModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
                     .fill(isHovered ? DesignTokens.Colors.rowCardHover : DesignTokens.Colors.rowCard)
             )
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
                     .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
@@ -99,7 +98,7 @@ extension View {
 // MARK: - Previews
 
 #Preview("Hoverable Row") {
-    VStack(spacing: 0) {
+    VStack(spacing: 4) {
         HStack {
             Image(systemName: "music.note")
             Text("Spotify")
@@ -117,7 +116,7 @@ extension View {
         .hoverableRow()
     }
     .padding()
-    .background(.ultraThinMaterial)
+    .darkGlassBackground()
     .environment(\.colorScheme, .dark)
 }
 
@@ -130,7 +129,7 @@ extension View {
             .sectionHeaderStyle()
     }
     .padding()
-    .background(.ultraThinMaterial)
+    .darkGlassBackground()
     .environment(\.colorScheme, .dark)
 }
 
@@ -141,6 +140,6 @@ extension View {
         Text("0%").percentageStyle()
     }
     .padding()
-    .background(.ultraThinMaterial)
+    .darkGlassBackground()
     .environment(\.colorScheme, .dark)
 }

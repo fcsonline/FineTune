@@ -37,6 +37,28 @@ final class AudioEngine {
             // This fixes the race condition where volumes were read before devices existed
             deviceVolumeMonitor.start()
 
+            // Sync device volume changes to taps for VU meter accuracy
+            deviceVolumeMonitor.onVolumeChanged = { [weak self] deviceID, newVolume in
+                guard let self else { return }
+                guard let deviceUID = self.deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid else { return }
+                for (pid, tap) in self.taps {
+                    if self.appDeviceRouting[pid] == deviceUID {
+                        tap.currentDeviceVolume = newVolume
+                    }
+                }
+            }
+
+            // Sync device mute changes to taps for VU meter accuracy
+            deviceVolumeMonitor.onMuteChanged = { [weak self] deviceID, isMuted in
+                guard let self else { return }
+                guard let deviceUID = self.deviceMonitor.outputDevices.first(where: { $0.id == deviceID })?.uid else { return }
+                for (pid, tap) in self.taps {
+                    if self.appDeviceRouting[pid] == deviceUID {
+                        tap.isDeviceMuted = isMuted
+                    }
+                }
+            }
+
             processMonitor.onAppsChanged = { [weak self] _ in
                 self?.cleanupStaleTaps()
                 self?.applyPersistedSettings()
@@ -117,9 +139,14 @@ final class AudioEngine {
             Task {
                 do {
                     try await tap.switchDevice(to: deviceUID)
-                    logger.debug("Switched \(app.name) to device: \(deviceUID)")
+                    // Update device volume/mute for VU meter after switch
+                    if let device = self.deviceMonitor.device(for: deviceUID) {
+                        tap.currentDeviceVolume = self.deviceVolumeMonitor.volumes[device.id] ?? 1.0
+                        tap.isDeviceMuted = self.deviceVolumeMonitor.muteStates[device.id] ?? false
+                    }
+                    self.logger.debug("Switched \(app.name) to device: \(deviceUID)")
                 } catch {
-                    logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
+                    self.logger.error("Failed to switch device for \(app.name): \(error.localizedDescription)")
                 }
             }
         } else {
@@ -185,6 +212,12 @@ final class AudioEngine {
 
         let tap = ProcessTapController(app: app, targetDeviceUID: deviceUID, deviceMonitor: deviceMonitor)
         tap.volume = volumeState.getVolume(for: app.id)
+
+        // Set initial device volume/mute for VU meter accuracy
+        if let device = deviceMonitor.device(for: deviceUID) {
+            tap.currentDeviceVolume = deviceVolumeMonitor.volumes[device.id] ?? 1.0
+            tap.isDeviceMuted = deviceVolumeMonitor.muteStates[device.id] ?? false
+        }
 
         do {
             try tap.activate()

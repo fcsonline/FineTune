@@ -51,12 +51,36 @@ final class ProcessTapController {
 
     // Peak audio level for VU meter display (0-1 range)
     // Written by audio callback, read by UI for visualization
-    // Uses simple max(abs(sample)) per buffer for efficiency
+    // Uses exponential smoothing to reduce nervous jumping
     private nonisolated(unsafe) var _peakLevel: Float = 0.0
+
+    // Smoothing factor for VU meter (0-1)
+    // Lower = smoother/slower response, Higher = more responsive
+    // 0.3 gives ~30ms effective integration at 30fps UI update rate
+    private let levelSmoothingFactor: Float = 0.3
+
+    // Current device volume scalar (0-1) for VU meter calculation
+    // Updated from main thread when device volume changes
+    private nonisolated(unsafe) var _currentDeviceVolume: Float = 1.0
+
+    // Current device mute state for VU meter calculation
+    private nonisolated(unsafe) var _isDeviceMuted: Bool = false
 
     /// Current peak audio level (0-1) for VU meter visualization
     /// Read from main thread, written from audio callback (atomic Float)
     var audioLevel: Float { _peakLevel }
+
+    /// Current device volume for VU meter scaling (atomic write from main thread)
+    var currentDeviceVolume: Float {
+        get { _currentDeviceVolume }
+        set { _currentDeviceVolume = newValue }
+    }
+
+    /// Current device mute state for VU meter (atomic write from main thread)
+    var isDeviceMuted: Bool {
+        get { _isDeviceMuted }
+        set { _isDeviceMuted = newValue }
+    }
 
     // Ramp coefficient for ~30ms smoothing, computed from device sample rate on activation
     // Formula: 1 - exp(-1 / (sampleRate * rampTimeSeconds))
@@ -681,14 +705,36 @@ final class ProcessTapController {
             return
         }
 
+        let inputBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputBufferList))
+
+        // Track peak level for VU meter (RT-safe: simple max tracking + smoothing)
+        // Always measure INPUT signal so VU shows source activity even when muted
+        // This helps users see "app is playing" and supports future EQ visualization
+        var maxPeak: Float = 0.0
+        for inputBuffer in inputBuffers {
+            guard let inputData = inputBuffer.mData else { continue }
+            let inputSamples = inputData.assumingMemoryBound(to: Float.self)
+            let sampleCount = Int(inputBuffer.mDataByteSize) / MemoryLayout<Float>.size
+            // Only check even samples (stereo interleaved: L, R, L, R...)
+            for i in stride(from: 0, to: sampleCount, by: 2) {
+                let absSample = abs(inputSamples[i])
+                if absSample > maxPeak {
+                    maxPeak = absSample
+                }
+            }
+        }
+        // Apply exponential smoothing to reduce nervous jumping
+        // smoothed = previous + factor * (new - previous)
+        let rawPeak = min(maxPeak, 1.0)
+        _peakLevel = _peakLevel + levelSmoothingFactor * (rawPeak - _peakLevel)
+
         // Check user mute flag (atomic Bool read)
-        // When muted, output zeros and show no VU meter activity
+        // When muted, output zeros but VU meter still shows source activity (measured above)
         if _isMuted {
             for outputBuffer in outputBuffers {
                 guard let outputData = outputBuffer.mData else { continue }
                 memset(outputData, 0, Int(outputBuffer.mDataByteSize))
             }
-            _peakLevel = 0.0
             return
         }
 
@@ -709,11 +755,6 @@ final class ProcessTapController {
         } else {
             crossfadeMultiplier = 1.0
         }
-
-        let inputBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputBufferList))
-
-        // Track peak level for VU meter (RT-safe: simple max tracking)
-        var maxPeak: Float = 0.0
 
         // Copy input to output with ramped gain and soft limiting
         for (inputBuffer, outputBuffer) in zip(inputBuffers, outputBuffers) {
@@ -740,19 +781,8 @@ final class ProcessTapController {
                 }
 
                 outputSamples[i] = sample
-
-                // Track peak for VU meter (only for odd samples to reduce CPU - stereo interleaved)
-                if i & 1 == 0 {
-                    let absSample = abs(sample)
-                    if absSample > maxPeak {
-                        maxPeak = absSample
-                    }
-                }
             }
         }
-
-        // Store peak level for UI (atomic Float write)
-        _peakLevel = min(maxPeak, 1.0)
 
         // Store for next callback
         _primaryCurrentVolume = currentVol
@@ -760,9 +790,51 @@ final class ProcessTapController {
 
     /// Audio processing callback for SECONDARY tap.
     /// During crossfade: fades IN (0 → 1) while primary fades out.
+    /// After promotion to primary: behaves identically to processAudio.
     /// OWNS crossfade timing via sample counting for sample-accurate transitions.
     private func processAudioSecondary(_ inputBufferList: UnsafePointer<AudioBufferList>, to outputBufferList: UnsafeMutablePointer<AudioBufferList>) {
         let outputBuffers = UnsafeMutableAudioBufferListPointer(outputBufferList)
+        let inputBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputBufferList))
+
+        // Track peak level for VU meter (RT-safe: simple max tracking + smoothing)
+        // Always measure INPUT signal so VU shows source activity even when muted
+        var maxPeak: Float = 0.0
+        var totalSamplesThisBuffer: Int = 0
+        for inputBuffer in inputBuffers {
+            guard let inputData = inputBuffer.mData else { continue }
+            let inputSamples = inputData.assumingMemoryBound(to: Float.self)
+            let sampleCount = Int(inputBuffer.mDataByteSize) / MemoryLayout<Float>.size
+            // Track samples for counter (only count once, not per channel)
+            if totalSamplesThisBuffer == 0 {
+                totalSamplesThisBuffer = sampleCount / 2  // Stereo interleaved: frames = samples / 2
+            }
+            // Only check even samples (stereo interleaved: L, R, L, R...)
+            for i in stride(from: 0, to: sampleCount, by: 2) {
+                let absSample = abs(inputSamples[i])
+                if absSample > maxPeak {
+                    maxPeak = absSample
+                }
+            }
+        }
+        // Apply exponential smoothing to reduce nervous jumping
+        let rawPeak = min(maxPeak, 1.0)
+        _peakLevel = _peakLevel + levelSmoothingFactor * (rawPeak - _peakLevel)
+
+        // Always update counters (needed for crossfade timing even when muted)
+        _secondarySamplesProcessed += totalSamplesThisBuffer
+        if _isCrossfading {
+            _secondarySampleCount += Int64(totalSamplesThisBuffer)
+        }
+
+        // Check user mute flag (atomic Bool read)
+        // When muted, output zeros but VU meter still shows source activity (measured above)
+        if _isMuted {
+            for outputBuffer in outputBuffers {
+                guard let outputData = outputBuffer.mData else { continue }
+                memset(outputData, 0, Int(outputBuffer.mDataByteSize))
+            }
+            return
+        }
 
         // Read target volume
         let targetVol = _volume
@@ -778,10 +850,6 @@ final class ProcessTapController {
             crossfadeMultiplier = sin(progress * .pi / 2.0)
         }
 
-        let inputBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputBufferList))
-
-        var totalSamplesThisBuffer: Int = 0
-
         // Copy input to output with ramped gain and crossfade
         for (inputBuffer, outputBuffer) in zip(inputBuffers, outputBuffers) {
             guard let inputData = inputBuffer.mData,
@@ -790,11 +858,6 @@ final class ProcessTapController {
             let inputSamples = inputData.assumingMemoryBound(to: Float.self)
             let outputSamples = outputData.assumingMemoryBound(to: Float.self)
             let sampleCount = Int(inputBuffer.mDataByteSize) / MemoryLayout<Float>.size
-
-            // Track samples for counter (only count once, not per channel)
-            if totalSamplesThisBuffer == 0 {
-                totalSamplesThisBuffer = sampleCount / 2  // Stereo interleaved: frames = samples / 2
-            }
 
             for i in 0..<sampleCount {
                 // Per-sample volume ramping
@@ -810,15 +873,6 @@ final class ProcessTapController {
 
                 outputSamples[i] = sample
             }
-        }
-
-        // Increment warmup counter (always, even after crossfade completes)
-        // This tracks that secondary HAL I/O is actively processing audio
-        _secondarySamplesProcessed += totalSamplesThisBuffer
-
-        // Increment crossfade sample counter (only during crossfade animation)
-        if _isCrossfading {
-            _secondarySampleCount += Int64(totalSamplesThisBuffer)
         }
 
         // Store for next callback

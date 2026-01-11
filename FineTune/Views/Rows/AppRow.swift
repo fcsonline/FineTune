@@ -56,59 +56,64 @@ struct AppRow: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: DesignTokens.Dimensions.iconSize, height: DesignTokens.Dimensions.iconSize)
 
-            // App name - expands to fill available space so sliders align
+            // App name - expands to fill available space
             Text(app.name)
                 .font(DesignTokens.Typography.rowName)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Mute button
-            MuteButton(isMuted: showMutedIcon) {
-                if showMutedIcon {
-                    // Unmute: restore to default if at 0
-                    if sliderValue == 0 {
-                        sliderValue = defaultUnmuteVolume
+            // Controls section - fixed width so sliders align across rows
+            HStack(spacing: DesignTokens.Spacing.sm) {
+                // Mute button
+                MuteButton(isMuted: showMutedIcon) {
+                    if showMutedIcon {
+                        // Unmute: restore to default if at 0
+                        if sliderValue == 0 {
+                            sliderValue = defaultUnmuteVolume
+                        }
+                        onMuteChange(false)
+                    } else {
+                        // Mute
+                        onMuteChange(true)
                     }
-                    onMuteChange(false)
-                } else {
-                    // Mute
-                    onMuteChange(true)
                 }
+
+                // Volume slider with unity marker
+                MinimalSlider(
+                    value: $sliderValue,
+                    showUnityMarker: true,
+                    onEditingChanged: { editing in
+                        isEditing = editing
+                    }
+                )
+                .frame(width: DesignTokens.Dimensions.sliderWidth)
+                .opacity(showMutedIcon ? 0.5 : 1.0)
+                .onChange(of: sliderValue) { _, newValue in
+                    let gain = VolumeMapping.sliderToGain(newValue)
+                    onVolumeChange(gain)
+                    // Auto-unmute when slider moved while muted
+                    if isMutedExternal {
+                        onMuteChange(false)
+                    }
+                }
+
+                // Volume percentage (0-200% matching slider position)
+                Text("\(Int(sliderValue * 200))%")
+                    .percentageStyle()
+
+                // VU Meter (shows gray bars when muted or volume is 0)
+                VUMeter(level: audioLevel, isMuted: showMutedIcon)
+
+                // Device picker - takes remaining space in controls
+                DevicePicker(
+                    devices: devices,
+                    selectedDeviceUID: selectedDeviceUID,
+                    onDeviceSelected: onDeviceSelected
+                )
             }
-
-            // Volume slider with unity marker - fixed width for alignment
-            MinimalSlider(
-                value: $sliderValue,
-                showUnityMarker: true,
-                onEditingChanged: { editing in
-                    isEditing = editing
-                }
-            )
-            .frame(width: 140)
-            .opacity(showMutedIcon ? 0.5 : 1.0)
-            .onChange(of: sliderValue) { _, newValue in
-                let gain = VolumeMapping.sliderToGain(newValue)
-                onVolumeChange(gain)
-                // Auto-unmute when slider moved while muted
-                if isMutedExternal {
-                    onMuteChange(false)
-                }
-            }
-
-            // Volume percentage (0-200% matching slider position)
-            Text("\(Int(sliderValue * 200))%")
-                .percentageStyle()
-
-            // VU Meter
-            VUMeter(level: audioLevel)
-
-            // Device picker
-            DevicePicker(
-                devices: devices,
-                selectedDeviceUID: selectedDeviceUID,
-                onDeviceSelected: onDeviceSelected
-            )
+            .frame(width: DesignTokens.Dimensions.controlsWidth)
         }
+        .frame(height: DesignTokens.Dimensions.rowContentHeight)
         .hoverableRow()
         .onChange(of: volume) { _, newValue in
             // Only sync from external changes when user is NOT dragging
@@ -174,7 +179,7 @@ struct AppRowWithLevelPolling: View {
 
 #Preview("App Row") {
     PreviewContainer {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             AppRow(
                 app: MockData.sampleApps[0],
                 volume: 1.0,
@@ -213,7 +218,7 @@ struct AppRowWithLevelPolling: View {
 
 #Preview("App Row - Multiple Apps") {
     PreviewContainer {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             ForEach(MockData.sampleApps) { app in
                 AppRow(
                     app: app,

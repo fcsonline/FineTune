@@ -18,6 +18,12 @@ final class DeviceVolumeMonitor {
     /// The current default output device UID (cached to avoid redundant Core Audio calls)
     private(set) var defaultDeviceUID: String?
 
+    /// Called when any device's volume changes (deviceID, newVolume)
+    var onVolumeChanged: ((AudioDeviceID, Float) -> Void)?
+
+    /// Called when any device's mute state changes (deviceID, isMuted)
+    var onMuteChanged: ((AudioDeviceID, Bool) -> Void)?
+
     private let deviceMonitor: AudioDeviceMonitor
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "FineTune", category: "DeviceVolumeMonitor")
 
@@ -253,6 +259,7 @@ final class DeviceVolumeMonitor {
         guard deviceID.isValid else { return }
         let newVolume = deviceID.readOutputVolumeScalar()
         volumes[deviceID] = newVolume
+        onVolumeChanged?(deviceID, newVolume)
         logger.debug("Volume changed for device \(deviceID): \(newVolume)")
     }
 
@@ -294,6 +301,7 @@ final class DeviceVolumeMonitor {
         guard deviceID.isValid else { return }
         let newMuteState = deviceID.readMuteState()
         muteStates[deviceID] = newMuteState
+        onMuteChanged?(deviceID, newMuteState)
         logger.debug("Mute changed for device \(deviceID): \(newMuteState)")
     }
 

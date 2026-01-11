@@ -10,14 +10,14 @@ enum DesignTokens {
     enum Colors {
         // MARK: Background & Surface
 
-        /// Clear background - relies on .ultraThinMaterial
+        /// Clear background - relies on .thickMaterial
         static let surfaceBackground = Color.clear
 
-        /// Row card background - darker than container
-        static let rowCard = Color.white.opacity(0.08)
+        /// Row card background - matches idea design #1E2125
+        static let rowCard = Color(red: 0.118, green: 0.129, blue: 0.145)
 
-        /// Row card hover - slightly brighter
-        static let rowCardHover = Color.white.opacity(0.12)
+        /// Row card hover - slightly brighter than rowCard
+        static let rowCardHover = Color(red: 0.16, green: 0.17, blue: 0.19)
 
         /// Row active/pressed state
         static let rowActive = Color.white.opacity(0.14)
@@ -38,20 +38,23 @@ enum DesignTokens {
 
         // MARK: VU Meter
 
-        /// VU meter green segments (levels 1-5)
+        /// VU meter green segments (bars 0-3, safe levels)
         static let vuGreen = Color(red: 0.20, green: 0.78, blue: 0.40)
 
-        /// VU meter yellow segments (levels 6-7)
+        /// VU meter yellow segments (bars 4-5, caution)
         static let vuYellow = Color(red: 0.95, green: 0.75, blue: 0.20)
 
-        /// VU meter orange segment (level 8 warning)
+        /// VU meter orange segment (bar 6, warning)
         static let vuOrange = Color(red: 0.95, green: 0.50, blue: 0.20)
 
-        /// VU meter red segment (peak/clip)
+        /// VU meter red segment (bar 7, peak/clip)
         static let vuRed = Color(red: 0.90, green: 0.25, blue: 0.25)
 
         /// VU meter unlit bar color
         static let vuUnlit = Color.white.opacity(0.08)
+
+        /// VU meter muted state (gray bars to show "active but muted")
+        static let vuMuted = Color.white.opacity(0.35)
 
         // MARK: Text
 
@@ -140,8 +143,20 @@ enum DesignTokens {
     // MARK: - Dimensions
 
     enum Dimensions {
-        /// Main popup width
-        static let popupWidth: CGFloat = 540
+        // MARK: Base Configuration (single source of truth)
+
+        /// Main popup width - change this to resize proportional dimensions
+        static let popupWidth: CGFloat = 580
+
+        /// Content padding (used for derived calculations)
+        static var contentPadding: CGFloat { Spacing.lg }
+
+        /// Available content width after padding
+        static var contentWidth: CGFloat {
+            popupWidth - (contentPadding * 2)
+        }
+
+        // MARK: Fixed Dimensions (don't scale with popup)
 
         /// Max height for scrollable content
         static let maxScrollHeight: CGFloat = 400
@@ -164,11 +179,42 @@ enum DesignTokens {
         /// Slider thumb diameter
         static let sliderThumbSize: CGFloat = 14
 
-        /// Minimum slider width
+        /// Minimum touch/click target
+        static let minTouchTarget: CGFloat = 24
+
+        /// Standard row content height (ensures DeviceRow and AppRow match)
+        static let rowContentHeight: CGFloat = 28
+
+        // MARK: Component Widths
+
+        /// Slider width (fixed for alignment)
+        static let sliderWidth: CGFloat = 140
+
+        /// Minimum slider width (for DeviceRow flexible slider)
         static let sliderMinWidth: CGFloat = 120
 
-        /// VU meter total width
+        /// VU meter total width (fixed)
         static let vuMeterWidth: CGFloat = 28
+
+        /// Fixed width for controls section (mute + slider + % + VU + picker)
+        /// Ensures sliders align across all rows
+        static var controlsWidth: CGFloat {
+            contentWidth - iconSize - Spacing.sm - 100  // Leave ~100pt min for app name
+        }
+
+        /// Device picker width - derived so it aligns across rows
+        static var pickerWidth: CGFloat {
+            // controlsWidth - (Mute + Slider + % + VU + 4 spacings)
+            // = controlsWidth - (24 + 140 + 36 + 28 + 4*8)
+            controlsWidth - 260
+        }
+
+        // MARK: Content-driven Dimensions (fixed to fit text)
+
+        /// Percentage text width (fits "200%")
+        static let percentageWidth: CGFloat = 36
+
+        // MARK: VU Meter Internals
 
         /// VU meter bar height
         static let vuMeterBarHeight: CGFloat = 10
@@ -178,15 +224,6 @@ enum DesignTokens {
 
         /// Number of VU meter bars
         static let vuMeterBarCount: Int = 8
-
-        /// Percentage text width
-        static let percentageWidth: CGFloat = 36
-
-        /// Minimum touch/click target
-        static let minTouchTarget: CGFloat = 24
-
-        /// Device picker min width
-        static let pickerMinWidth: CGFloat = 100
     }
 
     // MARK: - Animation
@@ -220,7 +257,7 @@ enum DesignTokens {
         /// VU meter update interval (30fps)
         static let vuMeterUpdateInterval: TimeInterval = 1.0 / 30.0
 
-        /// VU meter peak hold duration before decay
-        static let vuMeterPeakHold: TimeInterval = 0.3
+        /// VU meter peak hold duration before decay (industry standard: 1-3s)
+        static let vuMeterPeakHold: TimeInterval = 0.5
     }
 }

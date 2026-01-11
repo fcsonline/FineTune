@@ -5,6 +5,7 @@ import SwiftUI
 /// Shows 8 bars that light up based on audio level with peak hold
 struct VUMeter: View {
     let level: Float
+    var isMuted: Bool = false
 
     @State private var peakLevel: Float = 0
     @State private var peakHoldTimer: Timer?
@@ -18,28 +19,51 @@ struct VUMeter: View {
                     index: index,
                     level: level,
                     peakLevel: peakLevel,
-                    barCount: barCount
+                    barCount: barCount,
+                    isMuted: isMuted
                 )
             }
         }
         .frame(width: DesignTokens.Dimensions.vuMeterWidth)
         .onChange(of: level) { _, newLevel in
-            // Update peak hold
             if newLevel > peakLevel {
+                // New peak - capture and start decay timer
                 peakLevel = newLevel
-                resetPeakTimer()
+                startPeakDecayTimer()
+            } else if peakLevel > newLevel && peakHoldTimer == nil {
+                // Level dropped below peak and no timer running - start decay
+                startPeakDecayTimer()
             }
         }
         .onDisappear {
             peakHoldTimer?.invalidate()
+            peakHoldTimer = nil
         }
     }
 
-    private func resetPeakTimer() {
+    private func startPeakDecayTimer() {
         peakHoldTimer?.invalidate()
-        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: DesignTokens.Timing.vuMeterPeakHold, repeats: false) { _ in
-            withAnimation(DesignTokens.Animation.vuMeterDecay) {
-                peakLevel = level
+        // After hold period, start gradual decay using repeating timer
+        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: DesignTokens.Timing.vuMeterPeakHold, repeats: false) { [self] _ in
+            // Start the gradual decay timer
+            startGradualDecay()
+        }
+    }
+
+    private func startGradualDecay() {
+        peakHoldTimer?.invalidate()
+        // Decay ~24dB over 2.8 seconds (BBC PPM standard)
+        // At 30fps, that's ~84 frames, so decay rate ≈ 0.012 per frame (linear in amplitude)
+        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [self] timer in
+            let decayRate: Float = 0.012  // Per-frame decay
+            if peakLevel > level {
+                withAnimation(DesignTokens.Animation.vuMeterLevel) {
+                    peakLevel = max(level, peakLevel - decayRate)
+                }
+            } else {
+                // Peak has reached current level, stop decaying
+                timer.invalidate()
+                peakHoldTimer = nil
             }
         }
     }
@@ -51,10 +75,17 @@ private struct VUMeterBar: View {
     let level: Float
     let peakLevel: Float
     let barCount: Int
+    var isMuted: Bool = false
 
-    /// Threshold for this bar (0-1)
+    /// dB thresholds for 8 bars covering 40dB range
+    /// Matches professional audio meter standards (logarithmic scale)
+    private static let dbThresholds: [Float] = [-40, -30, -20, -14, -10, -6, -3, 0]
+
+    /// Threshold for this bar (0-1) using dB scale
+    /// Converts dB to linear: 10^(dB/20)
     private var threshold: Float {
-        Float(index + 1) / Float(barCount)
+        let db = Self.dbThresholds[min(index, Self.dbThresholds.count - 1)]
+        return powf(10, db / 20)
     }
 
     /// Whether this bar should be lit based on current level
@@ -64,16 +95,30 @@ private struct VUMeterBar: View {
 
     /// Whether this bar is the peak indicator
     private var isPeakIndicator: Bool {
-        let peakBarIndex = Int(peakLevel * Float(barCount))
-        return index == min(peakBarIndex, barCount - 1) && peakLevel > level
+        // Find which bar the peak level falls into using dB thresholds
+        var peakBarIndex = 0
+        for i in 0..<Self.dbThresholds.count {
+            let thresh = powf(10, Self.dbThresholds[i] / 20)
+            if peakLevel >= thresh {
+                peakBarIndex = i
+            }
+        }
+        return index == peakBarIndex && peakLevel > level
     }
 
-    /// Color for this bar based on its position
+    /// Color for this bar based on its position and mute state
+    /// Split: 4 green (0-3), 2 yellow (4-5), 1 orange (6), 1 red (7)
     private var barColor: Color {
-        if index < 5 {
+        // When muted, show gray to indicate "app is active but muted"
+        if isMuted {
+            return DesignTokens.Colors.vuMuted
+        }
+        if index < 4 {
             return DesignTokens.Colors.vuGreen
-        } else if index < 7 {
+        } else if index < 6 {
             return DesignTokens.Colors.vuYellow
+        } else if index < 7 {
+            return DesignTokens.Colors.vuOrange
         } else {
             return DesignTokens.Colors.vuRed
         }
@@ -93,6 +138,7 @@ private struct VUMeterBar: View {
 /// Vertical VU meter (bars stacked vertically)
 struct VUMeterVertical: View {
     let level: Float
+    var isMuted: Bool = false
 
     @State private var peakLevel: Float = 0
     @State private var peakHoldTimer: Timer?
@@ -107,27 +153,51 @@ struct VUMeterVertical: View {
                     index: index,
                     level: level,
                     peakLevel: peakLevel,
-                    barCount: barCount
+                    barCount: barCount,
+                    isMuted: isMuted
                 )
             }
         }
         .frame(width: DesignTokens.Dimensions.vuMeterWidth)
         .onChange(of: level) { _, newLevel in
             if newLevel > peakLevel {
+                // New peak - capture and start decay timer
                 peakLevel = newLevel
-                resetPeakTimer()
+                startPeakDecayTimer()
+            } else if peakLevel > newLevel && peakHoldTimer == nil {
+                // Level dropped below peak and no timer running - start decay
+                startPeakDecayTimer()
             }
         }
         .onDisappear {
             peakHoldTimer?.invalidate()
+            peakHoldTimer = nil
         }
     }
 
-    private func resetPeakTimer() {
+    private func startPeakDecayTimer() {
         peakHoldTimer?.invalidate()
-        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: DesignTokens.Timing.vuMeterPeakHold, repeats: false) { _ in
-            withAnimation(DesignTokens.Animation.vuMeterDecay) {
-                peakLevel = level
+        // After hold period, start gradual decay using repeating timer
+        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: DesignTokens.Timing.vuMeterPeakHold, repeats: false) { [self] _ in
+            // Start the gradual decay timer
+            startGradualDecay()
+        }
+    }
+
+    private func startGradualDecay() {
+        peakHoldTimer?.invalidate()
+        // Decay ~24dB over 2.8 seconds (BBC PPM standard)
+        // At 30fps, that's ~84 frames, so decay rate ≈ 0.012 per frame (linear in amplitude)
+        peakHoldTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [self] timer in
+            let decayRate: Float = 0.012  // Per-frame decay
+            if peakLevel > level {
+                withAnimation(DesignTokens.Animation.vuMeterLevel) {
+                    peakLevel = max(level, peakLevel - decayRate)
+                }
+            } else {
+                // Peak has reached current level, stop decaying
+                timer.invalidate()
+                peakHoldTimer = nil
             }
         }
     }
@@ -139,9 +209,17 @@ private struct VUMeterBarVertical: View {
     let level: Float
     let peakLevel: Float
     let barCount: Int
+    var isMuted: Bool = false
 
+    /// dB thresholds for 8 bars covering 40dB range
+    /// Matches professional audio meter standards (logarithmic scale)
+    private static let dbThresholds: [Float] = [-40, -30, -20, -14, -10, -6, -3, 0]
+
+    /// Threshold for this bar (0-1) using dB scale
+    /// Converts dB to linear: 10^(dB/20)
     private var threshold: Float {
-        Float(index + 1) / Float(barCount)
+        let db = Self.dbThresholds[min(index, Self.dbThresholds.count - 1)]
+        return powf(10, db / 20)
     }
 
     private var isLit: Bool {
@@ -149,15 +227,30 @@ private struct VUMeterBarVertical: View {
     }
 
     private var isPeakIndicator: Bool {
-        let peakBarIndex = Int(peakLevel * Float(barCount))
-        return index == min(peakBarIndex, barCount - 1) && peakLevel > level
+        // Find which bar the peak level falls into using dB thresholds
+        var peakBarIndex = 0
+        for i in 0..<Self.dbThresholds.count {
+            let thresh = powf(10, Self.dbThresholds[i] / 20)
+            if peakLevel >= thresh {
+                peakBarIndex = i
+            }
+        }
+        return index == peakBarIndex && peakLevel > level
     }
 
+    /// Color for this bar based on its position and mute state
+    /// Split: 4 green (0-3), 2 yellow (4-5), 1 orange (6), 1 red (7)
     private var barColor: Color {
-        if index < 5 {
+        // When muted, show gray to indicate "app is active but muted"
+        if isMuted {
+            return DesignTokens.Colors.vuMuted
+        }
+        if index < 4 {
             return DesignTokens.Colors.vuGreen
-        } else if index < 7 {
+        } else if index < 6 {
             return DesignTokens.Colors.vuYellow
+        } else if index < 7 {
+            return DesignTokens.Colors.vuOrange
         } else {
             return DesignTokens.Colors.vuRed
         }

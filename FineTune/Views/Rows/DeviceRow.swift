@@ -99,6 +99,7 @@ struct DeviceRow: View {
             Text("\(Int(sliderValue * 100))%")
                 .percentageStyle()
         }
+        .frame(height: DesignTokens.Dimensions.rowContentHeight)
         .hoverableRow()
         .onChange(of: volume) { _, newValue in
             // Only sync from external changes when user is NOT dragging

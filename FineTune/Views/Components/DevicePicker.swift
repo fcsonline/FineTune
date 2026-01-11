@@ -1,8 +1,7 @@
 // FineTune/Views/Components/DevicePicker.swift
 import SwiftUI
 
-/// A styled device picker dropdown
-/// Shows current device with icon, name, and chevron
+/// A styled device picker dropdown using native Menu
 struct DevicePicker: View {
     let devices: [AudioDevice]
     let selectedDeviceUID: String
@@ -12,6 +11,44 @@ struct DevicePicker: View {
 
     private var selectedDevice: AudioDevice? {
         devices.first { $0.uid == selectedDeviceUID }
+    }
+
+    private var pickerLabel: some View {
+        ZStack {
+            // Invisible sizing layer
+            Color.clear
+                .frame(
+                    width: DesignTokens.Dimensions.pickerWidth,
+                    height: 20
+                )
+
+            // Content layer
+            HStack {
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    if let icon = selectedDevice?.icon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: "speaker.wave.2")
+                            .font(.system(size: 14))
+                    }
+
+                    Text(selectedDevice?.name ?? "Select")
+                        .font(DesignTokens.Typography.pickerText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: DesignTokens.Spacing.sm)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+        }
+        .contentShape(Rectangle())
     }
 
     var body: some View {
@@ -27,54 +64,23 @@ struct DevicePicker: View {
                             Image(systemName: "speaker.wave.2")
                         }
                         Text(device.name)
-
-                        if device.uid == selectedDeviceUID {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
                     }
                 }
             }
         } label: {
-            HStack(spacing: DesignTokens.Spacing.xs) {
-                // Device icon
-                Group {
-                    if let icon = selectedDevice?.icon {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } else {
-                        Image(systemName: "speaker.wave.2")
-                    }
-                }
-                .frame(
-                    width: DesignTokens.Dimensions.iconSizeSmall,
-                    height: DesignTokens.Dimensions.iconSizeSmall
-                )
-
-                // Device name
-                Text(selectedDevice?.name ?? "Select Device")
-                    .font(DesignTokens.Typography.pickerText)
-                    .lineLimit(1)
-
-                // Chevron
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(DesignTokens.Colors.textTertiary)
-            }
-            .padding(.horizontal, DesignTokens.Spacing.sm)
-            .padding(.vertical, DesignTokens.Spacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                    .fill(isHovered ? DesignTokens.Colors.pickerHover : DesignTokens.Colors.pickerBackground)
-            )
-            .foregroundStyle(DesignTokens.Colors.textSecondary)
+            pickerLabel
         }
-        .menuStyle(.borderlessButton)
-        .frame(minWidth: DesignTokens.Dimensions.pickerMinWidth)
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
+                .fill(isHovered ? Color(red: 0.26, green: 0.27, blue: 0.29) : Color(red: 0.212, green: 0.224, blue: 0.235))  // #36393C
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+        )
+        .onHover { isHovered = $0 }
         .animation(DesignTokens.Animation.hover, value: isHovered)
     }
 }

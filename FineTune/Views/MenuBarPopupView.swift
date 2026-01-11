@@ -58,7 +58,7 @@ struct MenuBarPopupView: View {
         }
         .padding(DesignTokens.Spacing.lg)
         .frame(width: DesignTokens.Dimensions.popupWidth)
-        .background(.ultraThinMaterial)
+        .darkGlassBackground()
         .onAppear {
             updateSortedDevices()
         }
@@ -118,8 +118,10 @@ struct MenuBarPopupView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: DesignTokens.Dimensions.maxScrollHeight)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(minHeight: min(CGFloat(audioEngine.apps.count) * 44, 180), maxHeight: DesignTokens.Dimensions.maxScrollHeight)
     }
 
     // MARK: - Helpers
