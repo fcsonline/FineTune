@@ -1,7 +1,7 @@
 // FineTune/Views/DesignSystem/ViewModifiers.swift
 import SwiftUI
 
-// MARK: - Hoverable Row Modifier
+// MARK: - Hoverable Row Modifier (solid colors for reliable rendering)
 
 struct HoverableRowModifier: ViewModifier {
     @State private var isHovered = false
@@ -12,11 +12,18 @@ struct HoverableRowModifier: ViewModifier {
             .padding(.vertical, DesignTokens.Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                    .fill(isHovered ? DesignTokens.Colors.rowCardHover : DesignTokens.Colors.rowCard)
+                    .fill(.ultraThinMaterial)
+            )
+            // Hover effect overlay (materials don't have native hover states)
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
+                    .fill(isHovered ? Color.white.opacity(0.04) : Color.clear)
+                    .allowsHitTesting(false)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: DesignTokens.Dimensions.buttonRadius)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                    .stroke(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
+                    .allowsHitTesting(false)
             )
             .onHover { hovering in
                 isHovered = hovering
@@ -32,7 +39,7 @@ struct SectionHeaderStyleModifier: ViewModifier {
         content
             .font(DesignTokens.Typography.sectionHeader)
             .foregroundStyle(DesignTokens.Colors.textTertiary)
-            .tracking(1.2)
+            .tracking(DesignTokens.Typography.sectionHeaderTracking)
             .textCase(.uppercase)
     }
 }
@@ -48,7 +55,7 @@ struct PercentageTextModifier: ViewModifier {
     }
 }
 
-// MARK: - Icon Button Style Modifier
+// MARK: - Icon Button Style Modifier (Vibrancy-aware)
 
 struct IconButtonStyleModifier: ViewModifier {
     let isActive: Bool
@@ -56,11 +63,8 @@ struct IconButtonStyleModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(
-                isActive
-                    ? DesignTokens.Colors.mutedIndicator
-                    : (isHovered ? DesignTokens.Colors.interactiveHover : DesignTokens.Colors.interactiveDefault)
-            )
+            .foregroundStyle(foregroundColor)
+            .symbolRenderingMode(.hierarchical)  // Better vibrancy support
             .frame(minWidth: DesignTokens.Dimensions.minTouchTarget,
                    minHeight: DesignTokens.Dimensions.minTouchTarget)
             .contentShape(Rectangle())
@@ -69,12 +73,83 @@ struct IconButtonStyleModifier: ViewModifier {
             }
             .animation(DesignTokens.Animation.hover, value: isHovered)
     }
+
+    private var foregroundColor: Color {
+        if isActive {
+            return DesignTokens.Colors.mutedIndicator
+        } else if isHovered {
+            return DesignTokens.Colors.interactiveHover
+        } else {
+            return DesignTokens.Colors.interactiveDefault
+        }
+    }
+}
+
+// MARK: - Glass Button Style Modifier
+
+/// Button styling for glass aesthetic with vibrancy
+struct GlassButtonStyleModifier: ViewModifier {
+    @State private var isHovered = false
+    @State private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, DesignTokens.Spacing.sm)
+            .padding(.vertical, DesignTokens.Spacing.xs)
+            .background {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        isHovered ? DesignTokens.Colors.glassBorderHover : DesignTokens.Colors.glassBorder,
+                        lineWidth: 0.5
+                    )
+            }
+            .scaleEffect(isPressed ? 0.97 : (isHovered ? 1.02 : 1.0))
+            .onHover { hovering in
+                isHovered = hovering
+            }
+            .animation(DesignTokens.Animation.hover, value: isHovered)
+            .animation(DesignTokens.Animation.quick, value: isPressed)
+    }
+}
+
+// MARK: - Vibrancy Icon Modifier
+
+/// Applies proper vibrancy styling to SF Symbols
+struct VibrancyIconModifier: ViewModifier {
+    let style: VibrancyStyle
+
+    enum VibrancyStyle {
+        case primary   // Full brightness
+        case secondary // Slightly muted
+        case tertiary  // More muted
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(foregroundColor)
+    }
+
+    private var foregroundColor: Color {
+        switch style {
+        case .primary:
+            return .primary
+        case .secondary:
+            return .secondary
+        case .tertiary:
+            return DesignTokens.Colors.textTertiary
+        }
+    }
 }
 
 // MARK: - View Extensions
 
 extension View {
-    /// Applies hoverable row styling with background highlight on hover
+    /// Applies hoverable row styling (forwards to floatingGlassRow)
     func hoverableRow() -> some View {
         modifier(HoverableRowModifier())
     }
@@ -89,29 +164,43 @@ extension View {
         modifier(PercentageTextModifier())
     }
 
-    /// Applies icon button styling with hover state
+    /// Applies icon button styling with hover state (vibrancy-aware)
     func iconButtonStyle(isActive: Bool = false) -> some View {
         modifier(IconButtonStyleModifier(isActive: isActive))
+    }
+
+    /// Applies glass button styling
+    func glassButtonStyle() -> some View {
+        modifier(GlassButtonStyleModifier())
+    }
+
+    /// Applies vibrancy styling to SF Symbol icons
+    func vibrancyIcon(_ style: VibrancyIconModifier.VibrancyStyle = .secondary) -> some View {
+        modifier(VibrancyIconModifier(style: style))
     }
 }
 
 // MARK: - Previews
 
-#Preview("Hoverable Row") {
-    VStack(spacing: 4) {
+#Preview("Floating Glass Row") {
+    VStack(spacing: 8) {
         HStack {
             Image(systemName: "music.note")
+                .vibrancyIcon()
             Text("Spotify")
             Spacer()
             Text("75%")
+                .percentageStyle()
         }
         .hoverableRow()
 
         HStack {
             Image(systemName: "video")
+                .vibrancyIcon()
             Text("Zoom")
             Spacer()
             Text("100%")
+                .percentageStyle()
         }
         .hoverableRow()
     }
@@ -138,6 +227,76 @@ extension View {
         Text("100%").percentageStyle()
         Text("75%").percentageStyle()
         Text("0%").percentageStyle()
+    }
+    .padding()
+    .darkGlassBackground()
+    .environment(\.colorScheme, .dark)
+}
+
+#Preview("Icon Button Styles") {
+    HStack(spacing: 16) {
+        Button { } label: {
+            Image(systemName: "speaker.wave.2.fill")
+        }
+        .iconButtonStyle(isActive: false)
+
+        Button { } label: {
+            Image(systemName: "speaker.slash.fill")
+        }
+        .iconButtonStyle(isActive: true)
+
+        Button { } label: {
+            Image(systemName: "slider.vertical.3")
+        }
+        .iconButtonStyle(isActive: false)
+    }
+    .padding()
+    .darkGlassBackground()
+    .environment(\.colorScheme, .dark)
+}
+
+#Preview("Glass Button") {
+    HStack(spacing: 16) {
+        Button { } label: {
+            Label("Settings", systemImage: "gear")
+        }
+        .glassButtonStyle()
+
+        Button { } label: {
+            Label("Quit", systemImage: "power")
+        }
+        .glassButtonStyle()
+    }
+    .padding()
+    .darkGlassBackground()
+    .environment(\.colorScheme, .dark)
+}
+
+#Preview("Vibrancy Icons") {
+    HStack(spacing: 20) {
+        VStack {
+            Image(systemName: "headphones")
+                .font(.title)
+                .vibrancyIcon(.primary)
+            Text("Primary")
+                .font(.caption)
+        }
+
+        VStack {
+            Image(systemName: "headphones")
+                .font(.title)
+                .vibrancyIcon(.secondary)
+            Text("Secondary")
+                .font(.caption)
+        }
+
+        VStack {
+            Image(systemName: "headphones")
+                .font(.title)
+                .vibrancyIcon(.tertiary)
+            Text("Tertiary")
+                .font(.caption)
+        }
     }
     .padding()
     .darkGlassBackground()
